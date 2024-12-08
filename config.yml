@@ -1,0 +1,48 @@
+# 流量をもとにSRv6のSegment Listを生成するための設定ファイル
+# Topology:
+#        ns8
+#           \
+#    ns7     ns3
+#       \   /   \
+# ns1 -- ns2     ns5 -- ns6
+#           \   /
+#            ns4
+#
+# Interfaces:
+# - ns1(veth-12,fc00:a:12::/32) -- ns2(veth-21,fc00:a:21::/32)
+# - ns2(veth-23,fc00:b:23::/32) -- ns3(veth-32,fc00:b:32::/32)
+# - ns2(veth-24,fc00:c:24::/32) -- ns4(veth-42,fc00:c:42::/32)
+# - ns2(veth-27,fc00:aa:27::/32) -- ns7(veth-72,fc00:aa:72::/32)
+# - ns3(veth-35,fc00:d:35::/32) -- ns5(veth-53,fc00:d:53::/32)
+# - ns3(veth-38,fc00:bb:38::/32) -- ns8(veth-83,fc00:bb:83::/32)
+# - ns4(veth-45,fc00:e:45::/32) -- ns5(veth-54,fc00:e:54::/32)
+# - ns5(veth-56,fc00:d:56::/32) -- ns6(veth-65,fc00:d:65::/32)
+
+targets:
+  # ns1-ns6のデフォルトのSegment List = [ns3]
+  # 経路ns2-ns3の流量が524Mbps以上の場合、ns1-ns6のSegment Listを[ns4]に変更
+  # - watch_ip: "fc00:b:23::"
+  #   # ns2-ns3が524Mbps以上の場合
+  #   comparator: ">"
+  #   threshold: 524Mbps
+  #   interval: 1s
+  #   # 条件にマッチした場合、ns6行きのSegment Listを[ns4]に変更
+  #   if_true:
+  #     routes:
+  #       - prefix: "fc00:d:65::/128"
+  #         segment_list: ["fc00:c:42::"]
+  #   # ns1-ns6のデフォルトのSegment List = [ns3]
+  #   if_false:
+  #     routes:
+  #       - prefix: "fc00:d:65::/128"
+  #         segment_list: ["fc00:d:53::"]
+  # 動作テスト
+  - watch_ip: "192.168.15.5"
+    comparator: ">"
+    threshold: 90Mbps
+    interval: 1s
+    if_true:
+      routes:
+        - prefix: "8.8.0.0/16"
+          gateway: "192.168.0.1"
+          # segment_list: ["fc00:c:42::"]

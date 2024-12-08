@@ -1,0 +1,9 @@
+version: '3'
+tasks:
+  build:
+    sources:
+      - "**/*.go"
+    cmds:
+      - go build -o bin/{{.APP_NAME}} .
+vars:
+  APP_NAME: lb-legacy
