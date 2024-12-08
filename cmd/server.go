@@ -85,10 +85,10 @@ func runServer() error {
 			}
 
 			res := response{
-				req:         req.seq,
-				timestampUs: time.Now().UnixMicro(),
-				txBytes:     stats.TxBytes,
-				rxBytes:     stats.RxBytes,
+				req:     req.seq,
+				tsNano:  time.Now().UnixNano(),
+				txBytes: stats.TxBytes,
+				rxBytes: stats.RxBytes,
 			}
 
 			if err := res.write(conn); err != nil {
