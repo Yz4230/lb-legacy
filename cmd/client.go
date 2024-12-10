@@ -154,7 +154,7 @@ func runClient() error {
 				}
 			}()
 
-			ema := NewEMA(int(target.Interval.Milliseconds()))
+			ema := NewEMA(10)
 			lastTxBytes := uint64(0)
 			lastRxBytes := uint64(0)
 			lastMatched := false
