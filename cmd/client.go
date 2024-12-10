@@ -5,6 +5,7 @@ import (
 	"io"
 	"net"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/charmbracelet/log"
@@ -134,13 +135,35 @@ func runClient() error {
 			logger := log.WithPrefix(conn.RemoteAddr().String())
 			logger.Info("Connected")
 
-			ema := NewEMA(3)
+			// 1秒ごとにlatencyを表示
+			wg := &sync.WaitGroup{}
+			done := make(chan struct{})
+			lastNwLatency := time.Duration(0)
+			lastEntireLatency := time.Duration(0)
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				ticker := time.NewTicker(time.Second)
+				for {
+					select {
+					case <-done:
+						return
+					case <-ticker.C:
+						logger.Infof("Latency: [nw: %s] [entire: %s]", lastNwLatency, lastEntireLatency)
+					}
+				}
+			}()
+
+			ema := NewEMA(int(target.Interval.Milliseconds()))
 			lastTxBytes := uint64(0)
 			lastRxBytes := uint64(0)
 			lastMatched := false
 			ticker := time.NewTicker(target.Interval)
 			seq := uint32(1)
 			for range ticker.C {
+				now := time.Now()
+				startTime := now
+				reqTime := now
 				req := request{seq}
 				if err := req.write(conn); err != nil {
 					return errors.Wrap(err, "Failed to write request")
@@ -152,6 +175,8 @@ func runClient() error {
 				if err := res.read(conn); err != nil {
 					return errors.Wrap(err, "Failed to read response")
 				}
+
+				lastNwLatency = time.Since(reqTime)
 
 				if res.req != seq {
 					return errors.Newf("Invalid response ID: %d", res.req)
@@ -195,8 +220,13 @@ func runClient() error {
 				lastTxBytes = res.txBytes
 				lastRxBytes = res.rxBytes
 
+				lastEntireLatency = time.Since(startTime)
+
 				seq++
 			}
+
+			close(done)
+			wg.Wait()
 			return nil
 		})
 	}
