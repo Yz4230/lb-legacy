@@ -154,7 +154,7 @@ func runClient() error {
 				}
 			}()
 
-			ema := NewEMA(10)
+			ema := NewEMA(flags.EmaSpan)
 			lastTxBytes := uint64(0)
 			lastRxBytes := uint64(0)
 			lastMatched := false
