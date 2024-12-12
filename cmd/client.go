@@ -155,21 +155,31 @@ func runClient() error {
 			}()
 
 			ema := NewEMA(flags.EmaSpan)
-			lastTxBytes := uint64(0)
-			lastRxBytes := uint64(0)
+			var lastTxBytes, lastRxBytes uint64
+			var lastTsNano int64
 			lastMatched := false
-			ticker := time.NewTicker(target.Interval)
-			seq := uint32(1)
-			for range ticker.C {
+
+			eg.Go(func() error {
+				ticker := time.NewTicker(target.Interval)
+				seq := uint32(0)
+				for {
+					select {
+					case <-done:
+						return nil
+					case <-ticker.C:
+						seq++
+						req := request{seq}
+						if err := req.write(conn); err != nil {
+							return errors.Wrap(err, "Failed to write request")
+						}
+					}
+				}
+			})
+
+			for {
 				now := time.Now()
 				startTime := now
 				reqTime := now
-				req := request{seq}
-				if err := req.write(conn); err != nil {
-					return errors.Wrap(err, "Failed to write request")
-				}
-
-				logger.Debugf("Sent request: %+v", req)
 
 				var res response
 				if err := res.read(conn); err != nil {
@@ -177,15 +187,23 @@ func runClient() error {
 				}
 
 				lastNwLatency = time.Since(reqTime)
-
-				if res.req != seq {
-					return errors.Newf("Invalid response ID: %d", res.req)
-				}
-
+				logger.Debugf("Network latency: %s", lastNwLatency)
 				logger.Debugf("Received response: %+v", res)
 
-				bytesPerSecond := float64(res.txBytes-lastTxBytes) / float64(target.Interval.Seconds())
-				bytesPerSecond += float64(res.rxBytes-lastRxBytes) / float64(target.Interval.Seconds())
+				if res.seq == 0 {
+					// skip first response
+					lastTsNano = res.tsNano
+					lastTxBytes = res.txBytes
+					lastRxBytes = res.rxBytes
+					continue
+				}
+
+				elapsed := time.Duration(res.tsNano - lastTsNano)
+				logger.Debugf("Elapsed: %s", elapsed)
+				lastTsNano = res.tsNano
+				bytesPerSecond := float64(res.txBytes-lastTxBytes) / float64(elapsed.Seconds())
+				bytesPerSecond += float64(res.rxBytes-lastRxBytes) / float64(elapsed.Seconds())
+				logger.Debugf("bps: %s", newBitrate(uint64(bytesPerSecond*8)))
 
 				metric := ema.Update(bytesPerSecond)
 				metricBps := newBitrate(uint64(metric * 8))
@@ -220,8 +238,6 @@ func runClient() error {
 				lastRxBytes = res.rxBytes
 
 				lastEntireLatency = time.Since(startTime)
-
-				seq++
 			}
 
 			close(done)

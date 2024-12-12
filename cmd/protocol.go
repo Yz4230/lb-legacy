@@ -26,14 +26,14 @@ func (req *request) write(w io.Writer) error {
 }
 
 type response struct {
-	req     uint32
+	seq     uint32
 	tsNano  int64
 	txBytes uint64
 	rxBytes uint64
 }
 
 func (res *response) read(r io.Reader) error {
-	if err := binary.Read(r, binary.BigEndian, &res.req); err != nil {
+	if err := binary.Read(r, binary.BigEndian, &res.seq); err != nil {
 		return err
 	}
 	if err := binary.Read(r, binary.BigEndian, &res.tsNano); err != nil {
@@ -50,7 +50,7 @@ func (res *response) read(r io.Reader) error {
 }
 
 func (res *response) write(w io.Writer) error {
-	if err := binary.Write(w, binary.BigEndian, res.req); err != nil {
+	if err := binary.Write(w, binary.BigEndian, res.seq); err != nil {
 		return err
 	}
 	if err := binary.Write(w, binary.BigEndian, res.tsNano); err != nil {

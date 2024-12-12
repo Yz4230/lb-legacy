@@ -85,7 +85,7 @@ func runServer() error {
 			}
 
 			res := response{
-				req:     req.seq,
+				seq:     req.seq,
 				tsNano:  time.Now().UnixNano(),
 				txBytes: stats.TxBytes,
 				rxBytes: stats.RxBytes,
