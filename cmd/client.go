@@ -184,39 +184,38 @@ func runClient() error {
 
 				logger.Debugf("Received response: %+v", res)
 
-				if lastTxBytes > 0 && lastRxBytes > 0 {
-					bytesPerSecond := float64(res.txBytes-lastTxBytes) / float64(target.Interval.Seconds())
-					bytesPerSecond += float64(res.rxBytes-lastRxBytes) / float64(target.Interval.Seconds())
+				bytesPerSecond := float64(res.txBytes-lastTxBytes) / float64(target.Interval.Seconds())
+				bytesPerSecond += float64(res.rxBytes-lastRxBytes) / float64(target.Interval.Seconds())
 
-					metric := ema.Update(bytesPerSecond)
-					metricBps := newBitrate(uint64(metric * 8))
-					logger.Debugf("EMA: %s", newBitrate(uint64(metric*8)))
+				metric := ema.Update(bytesPerSecond)
+				metricBps := newBitrate(uint64(metric * 8))
+				logger.Debugf("EMA: %s", newBitrate(uint64(metric*8)))
 
-					matched := compare(target.Comparator, float64(metricBps.BytesPerSecond()), float64(thresh.BytesPerSecond()))
-					logger.Debugf("Threshold: %s %s %s => %t", metricBps, target.Comparator, thresh, matched)
+				matched := compare(target.Comparator, float64(metricBps.BytesPerSecond()), float64(thresh.BytesPerSecond()))
+				logger.Debugf("Threshold: %s %s %s => %t", metricBps, target.Comparator, thresh, matched)
 
-					if matched != lastMatched {
-						lastMatched = matched
-						for _, route := range target.IfTrue.Routes {
-							r := route.toNetlinkRoute()
-							if matched {
-								// add route
-								if err := netlink.RouteAdd(r); err != nil {
-									logger.Warnf("Failed to add route: %s: %s", err, r)
-								} else {
-									logger.Debugf("Added route: %s", r)
-								}
+				if matched != lastMatched {
+					lastMatched = matched
+					for _, route := range target.IfTrue.Routes {
+						r := route.toNetlinkRoute()
+						if matched {
+							// add route
+							if err := netlink.RouteAdd(r); err != nil {
+								logger.Warnf("Failed to add route: %s: %s", err, r)
 							} else {
-								// del route
-								if err := netlink.RouteDel(r); err != nil {
-									logger.Warnf("Failed to del route: %s: %s", err, r)
-								} else {
-									logger.Debugf("Deleted route: %s", r)
-								}
+								logger.Debugf("Added route: %s", r)
+							}
+						} else {
+							// del route
+							if err := netlink.RouteDel(r); err != nil {
+								logger.Warnf("Failed to del route: %s: %s", err, r)
+							} else {
+								logger.Debugf("Deleted route: %s", r)
 							}
 						}
 					}
 				}
+
 				lastTxBytes = res.txBytes
 				lastRxBytes = res.rxBytes
 
