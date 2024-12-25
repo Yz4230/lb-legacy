@@ -65,13 +65,13 @@ func parseUint(s string) (uint64, error) {
 	unit := uint64(1)
 	switch {
 	case strings.HasSuffix(s, "k"):
-		unit = 1 << 10
+		unit = 1_000
 		s = strings.TrimSuffix(s, "k")
 	case strings.HasSuffix(s, "M"):
-		unit = 1 << 20
+		unit = 1_000_000
 		s = strings.TrimSuffix(s, "M")
 	case strings.HasSuffix(s, "G"):
-		unit = 1 << 30
+		unit = 1_000_000_000
 		s = strings.TrimSuffix(s, "G")
 	}
 	v, err := strconv.ParseUint(s, 10, 64)
