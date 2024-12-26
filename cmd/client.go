@@ -153,11 +153,6 @@ func runClient() error {
 			wg := &sync.WaitGroup{}
 			done := make(chan struct{})
 
-			ema := NewEMA(flags.EmaSpan)
-			var lastTxBytes, lastRxBytes uint64
-			var lastTsNano int64
-			lastMatched := false
-
 			eg.Go(func() error {
 				ticker := time.NewTicker(target.Interval)
 				seq := uint32(0)
@@ -174,6 +169,11 @@ func runClient() error {
 					}
 				}
 			})
+
+			ema := NewEMA(flags.EmaSpan)
+			var lastTxBytes, lastRxBytes uint64
+			var lastTsNano int64
+			lastMatched := false
 
 			for !interrupted {
 				conn.SetDeadline(time.Now().Add(1 * time.Second))
@@ -236,6 +236,18 @@ func runClient() error {
 
 				lastTxBytes = res.txBytes
 				lastRxBytes = res.rxBytes
+			}
+
+			// delete routes
+			if lastMatched {
+				for _, route := range target.IfTrue.Routes {
+					r := route.toNetlinkRoute()
+					if err := netlink.RouteDel(r); err != nil {
+						logger.Warnf("Failed to del route: %s: %s", err, r)
+					} else {
+						logger.Debugf("Deleted route: %s", r)
+					}
+				}
 			}
 
 			close(done)
