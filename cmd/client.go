@@ -5,6 +5,7 @@ import (
 	"io"
 	"net"
 	"os"
+	"os/signal"
 	"sync"
 	"time"
 
@@ -125,6 +126,10 @@ func runClient() error {
 	log.Infof("Loaded config file: %s", flags.ConfigPath)
 	log.Debugf("Config: %+v", rc)
 
+	interrupt := make(chan os.Signal, 1)
+	interrupted := false
+	signal.Notify(interrupt, os.Interrupt)
+
 	eg := &errgroup.Group{}
 	for _, target := range rc.Targets {
 		thresh, err := parseBitrate(target.Threshold)
@@ -147,21 +152,6 @@ func runClient() error {
 			// 1秒ごとにlatencyを表示
 			wg := &sync.WaitGroup{}
 			done := make(chan struct{})
-			lastNwLatency := time.Duration(0)
-			lastEntireLatency := time.Duration(0)
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
-				ticker := time.NewTicker(time.Second)
-				for {
-					select {
-					case <-done:
-						return
-					case <-ticker.C:
-						logger.Infof("Latency: [nw: %s] [entire: %s]", lastNwLatency, lastEntireLatency)
-					}
-				}
-			}()
 
 			ema := NewEMA(flags.EmaSpan)
 			var lastTxBytes, lastRxBytes uint64
@@ -185,18 +175,19 @@ func runClient() error {
 				}
 			})
 
-			for {
-				now := time.Now()
-				startTime := now
-				reqTime := now
-
+			for !interrupted {
+				conn.SetDeadline(time.Now().Add(1 * time.Second))
 				var res response
 				if err := res.read(conn); err != nil {
+					if errors.Is(err, io.EOF) {
+						break
+					}
+					if errors.Is(err, os.ErrDeadlineExceeded) {
+						continue
+					}
 					return errors.Wrap(err, "Failed to read response")
 				}
 
-				lastNwLatency = time.Since(reqTime)
-				logger.Debugf("Network latency: %s", lastNwLatency)
 				logger.Debugf("Received response: %+v", res)
 
 				if res.seq == 0 {
@@ -245,8 +236,6 @@ func runClient() error {
 
 				lastTxBytes = res.txBytes
 				lastRxBytes = res.rxBytes
-
-				lastEntireLatency = time.Since(startTime)
 			}
 
 			close(done)
@@ -254,6 +243,10 @@ func runClient() error {
 			return nil
 		})
 	}
+
+	<-interrupt
+	interrupted = true
+	log.Info("👋 Interrupted. Bye!")
 
 	return eg.Wait()
 }

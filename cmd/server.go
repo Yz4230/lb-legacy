@@ -3,11 +3,14 @@ package cmd
 import (
 	"io"
 	"net"
+	"os"
+	"os/signal"
 	"time"
 
 	"github.com/charmbracelet/log"
 	"github.com/cockroachdb/errors"
 	"github.com/vishvananda/netlink"
+	"golang.org/x/sync/errgroup"
 )
 
 type StatCollector struct {
@@ -59,43 +62,68 @@ func runServer() error {
 
 	sc := NewStatCollector()
 
-	for {
-		conn, err := listener.Accept()
-		if err != nil {
-			return errors.Wrap(err, "Failed to accept")
-		}
-		defer conn.Close()
-		localAddr := conn.LocalAddr().(*net.TCPAddr)
-		logger := log.WithPrefix(conn.RemoteAddr().String())
-		logger.Info("Connected")
+	interrupt := make(chan os.Signal, 1)
+	interrupted := false
+	signal.Notify(interrupt, os.Interrupt)
 
-		for {
-			var req request
-			if err := req.read(conn); err != nil {
-				if errors.Is(err, io.EOF) {
-					break
-				}
-				return errors.Wrap(err, "Failed to read request")
-			}
-			logger.Debugf("Received request %+v", req)
-
-			stats, err := sc.GetLinkStats(&localAddr.IP)
+	eg := &errgroup.Group{}
+	eg.Go(func() error {
+		for !interrupted {
+			listener.SetDeadline(time.Now().Add(1 * time.Second))
+			conn, err := listener.Accept()
 			if err != nil {
-				return errors.Wrap(err, "Failed to get link stats")
+				if errors.Is(err, os.ErrDeadlineExceeded) {
+					continue
+				}
+				return errors.Wrap(err, "Failed to accept")
 			}
+			defer conn.Close()
+			localAddr := conn.LocalAddr().(*net.TCPAddr)
+			logger := log.WithPrefix(conn.RemoteAddr().String())
+			logger.Info("Connected")
 
-			res := response{
-				seq:     req.seq,
-				tsNano:  time.Now().UnixNano(),
-				txBytes: stats.TxBytes,
-				rxBytes: stats.RxBytes,
-			}
+			eg.Go(func() error {
+				for !interrupted {
+					conn.SetDeadline(time.Now().Add(1 * time.Second))
+					var req request
+					if err := req.read(conn); err != nil {
+						if errors.Is(err, io.EOF) {
+							break
+						}
+						if errors.Is(err, os.ErrDeadlineExceeded) {
+							continue
+						}
+						return errors.Wrap(err, "Failed to read request")
+					}
+					logger.Debugf("Received request %+v", req)
 
-			if err := res.write(conn); err != nil {
-				return errors.Wrap(err, "Failed to write response")
-			}
+					stats, err := sc.GetLinkStats(&localAddr.IP)
+					if err != nil {
+						return errors.Wrap(err, "Failed to get link stats")
+					}
 
-			logger.Debugf("Sent response %+v", res)
+					res := response{
+						seq:     req.seq,
+						tsNano:  time.Now().UnixNano(),
+						txBytes: stats.TxBytes,
+						rxBytes: stats.RxBytes,
+					}
+
+					if err := res.write(conn); err != nil {
+						return errors.Wrap(err, "Failed to write response")
+					}
+
+					logger.Debugf("Sent response %+v", res)
+				}
+				return nil
+			})
 		}
-	}
+		return nil
+	})
+
+	<-interrupt
+	interrupted = true
+	log.Info("👋 Interrupted. Bye!")
+
+	return eg.Wait()
 }
