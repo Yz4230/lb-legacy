@@ -16,6 +16,7 @@ type Flags struct {
 	RunAsClient bool
 	Port        int
 	ConfigPath  string
+	ConfigYaml  string
 	EmaSpan     int
 	LogLevel    string
 	Debug       bool
@@ -76,12 +77,12 @@ func init() {
 	rootCmd.Flags().IntVarP(&flags.Port, "port", "p", 8080, "Port number to run")
 
 	// config file (client only)
-	rootCmd.Flags().StringVarP(&flags.ConfigPath, "config", "f", "config.yml", "Config file path")
-	rootCmd.MarkFlagsRequiredTogether("client", "config")
+	rootCmd.Flags().StringVarP(&flags.ConfigPath, "config", "f", "", "Config file path")
+	rootCmd.Flags().StringVar(&flags.ConfigYaml, "config-yaml", "", "Config YAML string")
+	rootCmd.MarkFlagsMutuallyExclusive("config", "config-yaml")
 
 	// EMA span (client only)
 	rootCmd.Flags().IntVarP(&flags.EmaSpan, "ema-span", "e", 10, "EMA span")
-	rootCmd.MarkFlagsRequiredTogether("client", "ema-span")
 
 	// Debug mode
 	rootCmd.Flags().BoolVarP(&flags.Debug, "debug", "d", false, "Debug mode")

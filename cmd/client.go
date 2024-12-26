@@ -84,23 +84,32 @@ func compare(comparator string, a, b float64) bool {
 }
 
 func loadRouteConfig() (*RouteConfig, error) {
-	// check config file exists
-	if _, err := os.Stat(flags.ConfigPath); os.IsNotExist(err) {
-		return nil, errors.Newf("Config file not found: %s", flags.ConfigPath)
+	var content []byte
+	if flags.ConfigPath != "" {
+		// check config file exists
+		if _, err := os.Stat(flags.ConfigPath); os.IsNotExist(err) {
+			return nil, errors.Newf("Config file not found: %s", flags.ConfigPath)
+		}
+
+		// read config file
+		file, err := os.Open(flags.ConfigPath)
+		if err != nil {
+			return nil, errors.Wrap(err, "Failed to open config file")
+		}
+		defer file.Close()
+		buf := new(bytes.Buffer)
+		if _, err := io.Copy(buf, file); err != nil {
+			return nil, errors.Wrap(err, "Failed to read config file")
+		}
+		content = buf.Bytes()
+	} else if flags.ConfigYaml != "" {
+		content = []byte(flags.ConfigYaml)
+	} else {
+		panic("Config file or YAML string must be specified")
 	}
 
-	// read config file
 	config := RouteConfig{}
-	file, err := os.Open(flags.ConfigPath)
-	if err != nil {
-		return nil, errors.Wrap(err, "Failed to open config file")
-	}
-	defer file.Close()
-	buf := new(bytes.Buffer)
-	if _, err := io.Copy(buf, file); err != nil {
-		return nil, errors.Wrap(err, "Failed to read config file")
-	}
-	if err := yaml.Unmarshal(buf.Bytes(), &config); err != nil {
+	if err := yaml.Unmarshal(content, &config); err != nil {
 		return nil, errors.Wrap(err, "Failed to read config file")
 	}
 
