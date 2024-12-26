@@ -5,6 +5,7 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/charmbracelet/log"
@@ -64,7 +65,7 @@ func runServer() error {
 
 	interrupt := make(chan os.Signal, 1)
 	interrupted := false
-	signal.Notify(interrupt, os.Interrupt)
+	signal.Notify(interrupt, syscall.SIGINT, syscall.SIGTERM)
 
 	eg := &errgroup.Group{}
 	eg.Go(func() error {

@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/signal"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/charmbracelet/log"
@@ -128,7 +129,7 @@ func runClient() error {
 
 	interrupt := make(chan os.Signal, 1)
 	interrupted := false
-	signal.Notify(interrupt, os.Interrupt)
+	signal.Notify(interrupt, syscall.SIGINT, syscall.SIGTERM)
 
 	eg := &errgroup.Group{}
 	for _, target := range rc.Targets {
